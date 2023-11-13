@@ -1,9 +1,14 @@
-const Quest = require('../models/Quest');
+const Quest = require('../models/quest.model');
 
 const questController = {
   async createQuest(req, res) {
     try {
       const quest = new Quest(req.body);
+      const campaign = await Campaign.findById(req.params.campaign);
+
+      if (!campaign) {
+        return res.status(404).send({ error: 'Campaign not found.' });
+      }
       await quest.save();
       res.status(201).send(quest);
     } catch (error) {
@@ -13,7 +18,7 @@ const questController = {
 
   async getAllQuests(req, res) {
     try {
-      const quests = await Quest.find({});
+      const quests = await Quest.find({}).populate('campaign');
       res.send(quests);
     } catch (error) {
       res.status(500).send(error);
@@ -22,7 +27,7 @@ const questController = {
 
   async getQuest(req, res) {
     try {
-      const quest = await Quest.findById(req.params.id);
+      const quest = await Quest.findById(req.params.id).populate('campaign');
       if (!quest) {
         return res.status(404).send();
       }
@@ -32,26 +37,10 @@ const questController = {
     }
   },
 
-  async getQuestByCode(req, res) {
-    try {
-      const code = req.params.code;
-      const quest = await Quest.findOne({ code });
-
-      if (!quest) {
-        return res.status(404).send({ message: 'Quest not found.' });
-      }
-
-      res.send(quest);
-    } catch (error) {
-      res.status(500).send({ error: error.message });
-    }
-  },
-
   async updateQuest(req, res) {
     try {
       const quest = await Quest.findByIdAndUpdate(req.params.id, req.body, {
         new: true,
-        runValidators: true,
       });
       if (!quest) {
         return res.status(404).send();

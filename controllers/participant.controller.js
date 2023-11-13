@@ -1,7 +1,5 @@
-const Participant = require('../models/Participant');
-const Quest = require('../models/Quest');
-const { MerkleTree } = require('merkletreejs');
-const keccak256 = require('keccak256');
+const Participant = require('../models/participant.model');
+const Quest = require('../models/quest.model');
 
 const participantController = {
   async addParticipant(req, res) {
@@ -16,11 +14,29 @@ const participantController = {
         return res.status(400).send({ error: 'Quest is not active.' });
       }
 
-      const participant = new Participant({
+      const existingParticipant = await Participant.findOne({
         address: req.body.address,
         quest: req.params.questId,
       });
+
+      if (existingParticipant) {
+        return res
+          .status(409)
+          .send({ error: 'This address has already been added to the quest.' });
+      }
+
+      const participant = new Participant({
+        address: req.body.address,
+        quest: req.params.questId,
+        data: req.body.data || '',
+      });
+
       await participant.save();
+
+      await Quest.findByIdAndUpdate(req.params.questId, {
+        $push: { participants: participant._id },
+      });
+
       res.status(201).send(participant);
     } catch (error) {
       console.log(error);
@@ -53,11 +69,40 @@ const participantController = {
 
       const participant = await Participant.findOneAndUpdate(
         { _id: req.params.id, quest: req.params.questId },
-        req.body,
-        { new: true }
+        req.body
       );
       if (!participant) {
         return res.status(404).send();
+      }
+      res.send(participant);
+    } catch (error) {
+      res.status(400).send(error);
+    }
+  },
+
+  async markParticipantComplete(req, res) {
+    try {
+      const participant = await Participant.findOneAndUpdate(
+        { _id: req.params.participantId, quest: req.params.questId },
+        { isCompleted: true, updatedAt: new Date() }
+      );
+      if (!participant) {
+        return res.status(404).send({ error: 'Participant not found.' });
+      }
+      res.send(participant);
+    } catch (error) {
+      res.status(400).send(error);
+    }
+  },
+
+  async verifyParticipant(req, res) {
+    try {
+      const participant = await Participant.findOneAndUpdate(
+        { _id: req.params.participantId, quest: req.params.questId },
+        { isVerified: true, updatedAt: new Date() }
+      );
+      if (!participant) {
+        return res.status(404).send({ error: 'Participant not found.' });
       }
       res.send(participant);
     } catch (error) {

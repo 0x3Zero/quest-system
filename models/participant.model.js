@@ -14,6 +14,9 @@ const participantSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    data: {
+      type: String,
+    },
     quest: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Quest',
