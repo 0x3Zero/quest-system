@@ -2,7 +2,6 @@ const mongoose = require('mongoose');
 
 const questSchema = new mongoose.Schema(
   {
-    _id: mongoose.Schema.Types.ObjectId,
     title: {
       type: String,
       required: true,
@@ -14,6 +13,16 @@ const questSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Campaign',
       required: true,
+    },
+    action: {
+      type: String,
+      required: true,
+    },
+    actionData: {
+      type: String,
+    },
+    actionText: {
+      type: String,
     },
     participants: [
       {

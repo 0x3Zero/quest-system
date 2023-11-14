@@ -18,6 +18,7 @@ const campaignController = {
       await campaign.save();
       res.status(201).send(campaign);
     } catch (error) {
+      console.log(error);
       res.status(400).send(error);
     }
   },
@@ -50,6 +51,66 @@ const campaignController = {
       const campaignWithQuests = { ...campaign.toObject(), quests };
 
       res.send(campaignWithQuests);
+    } catch (error) {
+      res.status(500).send(error);
+    }
+  },
+
+  async getAllCampaignsWithParticipationFlag(req, res) {
+    try {
+      const participantAddress = req.params.address;
+
+      const participantQuests = await Participant.find({
+        address: participantAddress,
+      });
+
+      const participantQuestIds = participantQuests.map((participant) =>
+        participant.quest.toString()
+      );
+      let campaigns = await Campaign.find({});
+
+      const campaignsWithQuests = await Promise.all(
+        campaigns.map(async (campaign) => {
+          const quests = await Quest.find({ campaign: campaign._id });
+
+          const questsWithParticipationFlag = quests.map((quest) => ({
+            ...quest.toObject(),
+            isParticipated: participantQuestIds.includes(quest._id.toString()),
+          }));
+
+          return {
+            ...campaign.toObject(),
+            quests: questsWithParticipationFlag,
+          };
+        })
+      );
+
+      res.send(campaignsWithQuests);
+    } catch (error) {
+      console.log(error);
+      res.status(500).send(error);
+    }
+  },
+
+  async getCampaignsByParticipantAddress(req, res) {
+    try {
+      const participantAddress = req.params.address;
+
+      const participants = await Participant.find({
+        address: participantAddress,
+      });
+      const questIds = participants.map((participant) => participant.quest);
+      const uniqueQuests = await Quest.find({ _id: { $in: questIds } });
+      const campaignIds = uniqueQuests.map((quest) =>
+        quest.campaign.toString()
+      );
+      const uniqueCampaignIds = [...new Set(campaignIds)];
+
+      const campaigns = await Campaign.find({
+        _id: { $in: uniqueCampaignIds },
+      });
+
+      res.send(campaigns);
     } catch (error) {
       res.status(500).send(error);
     }
@@ -118,6 +179,8 @@ const campaignController = {
         'participants'
       );
 
+      console.log(quests);
+
       const participants = quests.flatMap((quest) => quest.participants);
 
       res.send(participants);
@@ -149,6 +212,53 @@ const campaignController = {
     }
   },
 
+  async updateCampaignSubmissions(req, res) {
+    try {
+      const campaignId = req.params.campaignId;
+      const campaign = await Campaign.findById(campaignId);
+      if (!campaign) {
+        return res.status(404).send({ error: 'Campaign not found.' });
+      }
+
+      const quests = await Quest.find({ campaign: campaign._id });
+
+      const completedParticipants = {};
+      for (const quest of quests) {
+        const participants = await Participant.find({
+          quest: quest._id,
+        });
+        participants.forEach((participant) => {
+          if (completedParticipants[participant.address]) {
+            completedParticipants[participant.address]++;
+          } else {
+            completedParticipants[participant.address] = 1;
+          }
+        });
+      }
+
+      const allQuestsCount = quests.length;
+      const completedAddresses = Object.keys(completedParticipants).filter(
+        (address) => completedParticipants[address] === allQuestsCount
+      );
+
+      if (!campaign.submissions) {
+        campaign.submissions = completedAddresses;
+        campaign.save();
+      } else {
+        await Campaign.findByIdAndUpdate(campaignId, {
+          $addToSet: { submissions: { $each: completedAddresses } },
+        });
+      }
+
+      res.send({
+        campaign,
+        addresses: completedAddresses,
+      });
+    } catch (error) {
+      res.status(500).send(error);
+    }
+  },
+
   async generateMerkleRoot(req, res) {
     try {
       const campaignId = req.params.campaignId;
@@ -162,16 +272,16 @@ const campaignController = {
         return res.status(400).send({ error: 'Campaign has not expired yet.' });
       }
 
-      const quests = await Quest.find({ campaign: campaignId });
-      const participantIds = quests.flatMap((quest) => quest.participants);
-      const verifiedParticipants = await Participant.find({
-        _id: { $in: participantIds },
-        isVerified: true,
-      });
+      if (!campaign.submissions || !campaign.submissions.length) {
+        return res.status(400).send({
+          error: 'Campaign not yet finalized, run /submissions endpoint.',
+        });
+      }
 
-      const leaves = verifiedParticipants.map((participant) =>
-        keccak256(participant.address)
+      const leaves = campaign.submissions.map((submission) =>
+        keccak256(submission)
       );
+
       const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
       const root = MerkleTree.bufferToHex(tree.getRoot());
 
@@ -203,15 +313,20 @@ const campaignController = {
         return res.status(400).send({ error: 'Campaign has not expired yet.' });
       }
 
-      const quests = await Quest.find({ campaign: campaignId });
-      const participantIds = quests.flatMap((quest) => quest.participants);
-      const verifiedParticipants = await Participant.find({
-        _id: { $in: participantIds },
-        isVerified: true,
-      });
+      if (!campaign.submissions || !campaign.submissions.length) {
+        return res.status(400).send({
+          error: 'Campaign not yet finalized, run /submissions endpoint.',
+        });
+      }
 
-      const leaves = verifiedParticipants.map((participant) =>
-        keccak256(participant.address)
+      if (!campaign.merkleTreeRoot) {
+        return res.status(400).send({
+          error: 'Campaign have no merkle root.',
+        });
+      }
+
+      const leaves = campaign.submissions.map((submission) =>
+        keccak256(submission)
       );
 
       const leaf = keccak256(req.params.address);

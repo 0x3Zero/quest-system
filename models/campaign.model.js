@@ -2,7 +2,6 @@ const mongoose = require('mongoose');
 
 const campaignSchema = new mongoose.Schema(
   {
-    _id: mongoose.Schema.Types.ObjectId,
     title: {
       type: String,
       required: true,
@@ -25,6 +24,11 @@ const campaignSchema = new mongoose.Schema(
         return !this.isOngoing;
       },
     },
+    submissions: [
+      {
+        type: String,
+      },
+    ],
     startedAt: {
       type: Date,
       required: function () {

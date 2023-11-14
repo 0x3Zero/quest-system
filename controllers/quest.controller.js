@@ -1,17 +1,20 @@
 const Quest = require('../models/quest.model');
+const Campaign = require('../models/campaign.model');
 
 const questController = {
   async createQuest(req, res) {
     try {
-      const quest = new Quest(req.body);
-      const campaign = await Campaign.findById(req.params.campaign);
+      const campaign = await Campaign.findById(req.body.campaign);
 
       if (!campaign) {
         return res.status(404).send({ error: 'Campaign not found.' });
       }
+
+      const quest = new Quest(req.body);
       await quest.save();
       res.status(201).send(quest);
     } catch (error) {
+      console.log(error);
       res.status(400).send(error);
     }
   },
