@@ -351,6 +351,10 @@ const campaignController = {
         });
       }
 
+      if (campaign.submissions.length === 1) {
+       campaign.submissions = campaign.submissions.flatMap(i => [i,i]) 
+      }
+
       const leaves = campaign.submissions.map((submission) =>
         keccak256(submission)
       );
