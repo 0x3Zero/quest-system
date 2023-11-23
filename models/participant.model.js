@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const participantSchema = new mongoose.Schema(
   {
-    address: {
+    tokenId: {
       type: String,
       required: true,
     },

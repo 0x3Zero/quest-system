@@ -1,3 +1,4 @@
+const Campaign = require('../models/campaign.model');
 const Participant = require('../models/participant.model');
 const Quest = require('../models/quest.model');
 
@@ -15,18 +16,18 @@ const participantController = {
       }
 
       const existingParticipant = await Participant.findOne({
-        address: req.body.address,
+        tokenId: req.body.tokenId,
         quest: req.params.questId,
       });
 
       if (existingParticipant) {
         return res
           .status(409)
-          .send({ error: 'This address has already been added to the quest.' });
+          .send({ error: 'This Nous Psyche has already completed the quest.' });
       }
 
       const participant = new Participant({
-        address: req.body.address,
+        tokenId: req.body.tokenId,
         quest: req.params.questId,
         data: req.body.data || '',
       });
@@ -127,13 +128,28 @@ const participantController = {
         isCompleted: true,
       });
 
-      const leaves = participants.map((participant) =>
-        keccak256(participant.address)
+      const provider = new ethers.JsonRpcProvider(process.env.INFURA_URL);
+      const contract = new ethers.Contract(
+        process.env.NFT_CONTRACT_ADDRESS,
+        abi,
+        provider
       );
+
+      const ownershipPromises = participants.map(async (participant) => {
+        const ownerAddress = await contract.ownerOf(participant.tokenId);
+        return ownerAddress;
+      });
+
+      const participantsWithOwnership = await Promise.all(ownershipPromises);
+
+      const leaves = participantsWithOwnership.map((address) =>
+        keccak256(address)
+      );
+
       let tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
 
       res.send({
-        participants,
+        participants: participantsWithOwnership,
         merkleRoot: MerkleTree.bufferToHex(tree.getRoot()),
       });
     } catch (error) {
@@ -156,12 +172,7 @@ const participantController = {
         return res.status(400).send({ error: 'Quest has not expired yet.' });
       }
 
-      const participants = await Participant.find({
-        quest: req.params.questId,
-        isCompleted: true,
-      });
-
-      const leaves = participants.map((participant) =>
+      const leaves = quest.participants.map((participant) =>
         keccak256(participant.address)
       );
 

@@ -9,7 +9,7 @@ router.get(
 
 router.post('/', campaignController.createCampaign);
 router.get(
-  '/address/:address',
+  '/token/:tokenId',
   campaignController.getAllCampaignsWithParticipationFlag
 );
 router.get('/', campaignController.getAllCampaigns);
@@ -38,8 +38,8 @@ router.get(
 );
 
 router.get(
-  '/participant/address/:address',
-  campaignController.getCampaignsByParticipantAddress
+  '/participant/token/:tokenId',
+  campaignController.getCampaignByTokenId
 );
 
 module.exports = router;

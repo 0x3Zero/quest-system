@@ -15,6 +15,7 @@ const questSchema = new mongoose.Schema(
       required: true,
     },
     action: {
+      // join_discord, join_twitter, have_nft, have_token
       type: String,
       required: true,
     },

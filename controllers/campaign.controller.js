@@ -3,6 +3,17 @@ const Participant = require('../models/participant.model');
 const Quest = require('../models/quest.model');
 const { MerkleTree } = require('merkletreejs');
 const keccak256 = require('keccak256');
+const { ethers } = require('ethers');
+
+const abi = [
+  {
+    inputs: [{ internalType: 'uint256', name: 'tokenId', type: 'uint256' }],
+    name: 'ownerOf',
+    outputs: [{ internalType: 'address', name: '', type: 'address' }],
+    stateMutability: 'view',
+    type: 'function',
+  },
+];
 
 const campaignController = {
   async createCampaign(req, res) {
@@ -58,10 +69,10 @@ const campaignController = {
 
   async getAllCampaignsWithParticipationFlag(req, res) {
     try {
-      const participantAddress = req.params.address;
+      const participantTokenId = req.params.tokenId;
 
       const participantQuests = await Participant.find({
-        address: participantAddress,
+        tokenId: participantTokenId,
       });
 
       const participantQuestIds = participantQuests.map((participant) =>
@@ -92,12 +103,12 @@ const campaignController = {
     }
   },
 
-  async getCampaignsByParticipantAddress(req, res) {
+  async getCampaignByTokenId(req, res) {
     try {
-      const participantAddress = req.params.address;
+      const participantTokenId = req.params.tokenId;
 
       const participants = await Participant.find({
-        address: participantAddress,
+        tokenId: participantTokenId,
       });
       const questIds = participants.map((participant) => participant.quest);
       const uniqueQuests = await Quest.find({ _id: { $in: questIds } });
@@ -228,33 +239,48 @@ const campaignController = {
           quest: quest._id,
         });
         participants.forEach((participant) => {
-          if (completedParticipants[participant.address]) {
-            completedParticipants[participant.address]++;
+          if (completedParticipants[participant.tokenId]) {
+            completedParticipants[participant.tokenId]++;
           } else {
-            completedParticipants[participant.address] = 1;
+            completedParticipants[participant.tokenId] = 1;
           }
         });
       }
 
       const allQuestsCount = quests.length;
-      const completedAddresses = Object.keys(completedParticipants).filter(
-        (address) => completedParticipants[address] === allQuestsCount
+      const completedTokenId = Object.keys(completedParticipants).filter(
+        (tokenId) => completedParticipants[tokenId] === allQuestsCount
       );
 
+      const provider = new ethers.JsonRpcProvider(process.env.INFURA_URL);
+      const contract = new ethers.Contract(
+        process.env.NFT_CONTRACT_ADDRESS,
+        abi,
+        provider
+      );
+
+      const ownershipPromises = completedTokenId.map(async (tokenId) => {
+        const ownerAddress = await contract.ownerOf(tokenId);
+        return ownerAddress;
+      });
+
+      const participantsWithOwnership = await Promise.all(ownershipPromises);
+
       if (!campaign.submissions) {
-        campaign.submissions = completedAddresses;
+        campaign.submissions = participantsWithOwnership;
         campaign.save();
       } else {
         await Campaign.findByIdAndUpdate(campaignId, {
-          $addToSet: { submissions: { $each: completedAddresses } },
+          $addToSet: { submissions: { $each: participantsWithOwnership } },
         });
       }
 
       res.send({
         campaign,
-        addresses: completedAddresses,
+        addresses: participantsWithOwnership,
       });
     } catch (error) {
+      console.log(error);
       res.status(500).send(error);
     }
   },
@@ -282,7 +308,7 @@ const campaignController = {
         keccak256(submission)
       );
 
-      const tree = new MerkleTree(leaves, keccak256, { sortPairs: true });
+      const tree = new MerkleTree(leaves, keccak256);
       const root = MerkleTree.bufferToHex(tree.getRoot());
 
       campaign.merkleTreeRoot = root;
